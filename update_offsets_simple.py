@@ -12,6 +12,7 @@ from pathlib import Path
 # Configuration
 GITHUB_OFFSETS_URL = "https://raw.githubusercontent.com/a2x/cs2-dumper/main/output/offsets.json"
 GITHUB_INFO_URL = "https://raw.githubusercontent.com/a2x/cs2-dumper/main/output/info.json"
+GITHUB_CLIENT_DLL_URL = "https://raw.githubusercontent.com/a2x/cs2-dumper/main/output/client_dll.json"
 OFFSETS_FILE = Path(__file__).parent / "offsets.json"
 
 # Only these 13 offsets will be extracted
@@ -54,18 +55,83 @@ def coerce_offset_value(offset_name, value):
     return parsed
 
 
-def extract_required_offsets(remote_offsets):
-    """Validate remote payload and return only required offset keys."""
+def get_nested_value(data, path):
+    """Read a nested dict value by path, returning None when missing."""
+    current = data
+    for part in path:
+        if not isinstance(current, dict) or part not in current:
+            return None
+        current = current[part]
+    return current
+
+
+def extract_required_offsets(remote_offsets, remote_client_dll):
+    """Extract required offsets from nested cs2-dumper outputs."""
     if not isinstance(remote_offsets, dict):
         raise ValueError("Remote offsets payload is not a JSON object")
+    if not isinstance(remote_client_dll, dict):
+        raise ValueError("Remote client_dll payload is not a JSON object")
 
-    missing = sorted(REQUIRED_OFFSETS - set(remote_offsets.keys()))
-    if missing:
-        raise ValueError(f"Missing required offsets: {', '.join(missing)}")
+    source_paths = {
+        "dwViewMatrix": ("offsets", ["client.dll", "dwViewMatrix"]),
+        "dwLocalPlayerPawn": ("offsets", ["client.dll", "dwLocalPlayerPawn"]),
+        "dwEntityList": ("offsets", ["client.dll", "dwEntityList"]),
+        "m_hPlayerPawn": (
+            "client_dll",
+            ["client.dll", "classes", "CCSPlayerController", "fields", "m_hPlayerPawn"],
+        ),
+        "m_iHealth": ("client_dll", ["client.dll", "classes", "C_BaseEntity", "fields", "m_iHealth"]),
+        "m_lifeState": (
+            "client_dll",
+            ["client.dll", "classes", "C_BaseEntity", "fields", "m_lifeState"],
+        ),
+        "m_iTeamNum": ("client_dll", ["client.dll", "classes", "C_BaseEntity", "fields", "m_iTeamNum"]),
+        "m_vOldOrigin": (
+            "client_dll",
+            ["client.dll", "classes", "C_BasePlayerPawn", "fields", "m_vOldOrigin"],
+        ),
+        "m_pGameSceneNode": (
+            "client_dll",
+            ["client.dll", "classes", "C_BaseEntity", "fields", "m_pGameSceneNode"],
+        ),
+        "m_modelState": (
+            "client_dll",
+            ["client.dll", "classes", "CSkeletonInstance", "fields", "m_modelState"],
+        ),
+        "m_nodeToWorld": (
+            "client_dll",
+            ["client.dll", "classes", "CGameSceneNode", "fields", "m_nodeToWorld"],
+        ),
+        "m_sSanitizedPlayerName": (
+            "client_dll",
+            ["client.dll", "classes", "CCSPlayerController", "fields", "m_sSanitizedPlayerName"],
+        ),
+    }
 
     extracted = {}
-    for offset_name in REQUIRED_OFFSETS:
-        extracted[offset_name] = coerce_offset_value(offset_name, remote_offsets[offset_name])
+    missing = []
+
+    for offset_name, (source, path) in source_paths.items():
+        source_data = remote_offsets if source == "offsets" else remote_client_dll
+        value = get_nested_value(source_data, path)
+        if value is None:
+            missing.append(f"{offset_name} ({source}:{'.'.join(path)})")
+            continue
+        extracted[offset_name] = coerce_offset_value(offset_name, value)
+
+    # In current dumps this is an offset inside CModelState and remains stable.
+    bone_array_value = get_nested_value(
+        remote_client_dll,
+        ["client.dll", "classes", "CModelState", "fields", "m_boneArray"],
+    )
+    if bone_array_value is None:
+        bone_array_value = 0x80
+    extracted["m_boneArray"] = coerce_offset_value("m_boneArray", bone_array_value)
+
+    missing_required = sorted(REQUIRED_OFFSETS - set(extracted.keys()))
+    if missing_required or missing:
+        details = ", ".join(missing + missing_required)
+        raise ValueError(f"Missing required offsets: {details}")
 
     return extracted
 
@@ -95,7 +161,11 @@ def get_remote_build():
         response = requests.get(GITHUB_INFO_URL, timeout=5)
         response.raise_for_status()
         data = response.json()
-        return data.get('build', 0)
+        # Upstream switched from `build` to `build_number`; support both.
+        build = data.get('build_number', data.get('build'))
+        if build is None:
+            raise ValueError(f"Missing build field in info.json (keys: {list(data.keys())})")
+        return int(build)
     except requests.RequestException as e:
         print(f"❌ Failed to fetch build info: {e}")
         return None
@@ -119,12 +189,16 @@ def update_offsets():
     """Fetch and update only the 13 essential offsets"""
     try:
         print("📡 Fetching offsets from GitHub...")
-        response = requests.get(GITHUB_OFFSETS_URL, timeout=5)
-        response.raise_for_status()
-        remote_offsets = response.json()
+        offsets_response = requests.get(GITHUB_OFFSETS_URL, timeout=5)
+        offsets_response.raise_for_status()
+        remote_offsets = offsets_response.json()
+
+        client_dll_response = requests.get(GITHUB_CLIENT_DLL_URL, timeout=5)
+        client_dll_response.raise_for_status()
+        remote_client_dll = client_dll_response.json()
         
         # Validate schema and extract only required keys.
-        updated_offsets = extract_required_offsets(remote_offsets)
+        updated_offsets = extract_required_offsets(remote_offsets, remote_client_dll)
         
         # Write a clean JSON file containing only the required keys.
         write_offsets_atomically(updated_offsets)
@@ -160,7 +234,7 @@ def main():
             # Update only when a new upstream build is available.
             if local_build != remote_build:
                 print(f"🎮 CS2 launched at {time.strftime('%H:%M:%S')}")
-                if remote_build:
+                if remote_build is not None:
                     print(f"Build mismatch: Local={local_build}, Remote={remote_build}")
                     if update_offsets():
                         # Persist build number so future launches skip redundant updates.
