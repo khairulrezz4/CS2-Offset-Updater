@@ -98,4 +98,24 @@ Updated 13 offsets
 - `offsets.json` is written in decimal format.
 - If a required key is missing upstream, the script prints a warning.
 
+## Update History
+
+### 2026-03-06
+
+#### Added
+
+- Support for `build_number` in upstream `info.json` (with fallback to legacy `build`).
+- Fallback for `m_boneArray` to `0x80` when not present upstream.
+
+#### Changed
+
+- Extractor now supports the new cs2-dumper schema:
+   - Reads module offsets from `output/offsets.json` under `client.dll`.
+   - Reads netvars from `output/client_dll.json` class `fields`.
+
+#### Fixed
+
+- Launch-update check now treats missing remote build as `None` only.
+- Validation now reports missing required offsets with clearer source/path context.
+
 Educational use only. You are responsible for complying with all applicable rules, terms, and laws. The author is not liable for any issues, damages, or losses that occur during installation or use.
