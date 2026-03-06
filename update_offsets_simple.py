@@ -56,6 +56,7 @@ def get_remote_build():
 
 def get_local_build():
     """Get cached build number"""
+    # Cache avoids unnecessary downloads when offsets are already current.
     if CACHE_FILE.exists():
         try:
             return int(CACHE_FILE.read_text().strip())
@@ -92,7 +93,7 @@ def update_offsets():
         if missing:
             print(f"⚠️  Missing offsets: {', '.join(missing)}")
         
-        # Save to file
+        # Write a clean JSON file containing only the required keys.
         OFFSETS_FILE.write_text(json.dumps(updated_offsets, indent=2))
         print(f"✓ Updated {len(updated_offsets)} offsets")
         return True
@@ -112,16 +113,18 @@ def main():
     while True:
         is_running = cs2_is_running()
         
-        # Detect CS2 launch (transition from not running to running)
+        # Trigger update only on launch edge (False -> True), not every loop.
         if is_running and not cs2_was_running:
             local_build = get_local_build()
             remote_build = get_remote_build()
             
+            # Update only when a new upstream build is available.
             if local_build != remote_build:
                 print(f"🎮 CS2 launched at {time.strftime('%H:%M:%S')}")
                 if remote_build:
                     print(f"Build mismatch: Local={local_build}, Remote={remote_build}")
                     if update_offsets():
+                        # Persist build number so future launches skip redundant updates.
                         CACHE_FILE.write_text(str(remote_build))
                         print("✓ Offsets updated to latest\n")
                     else:
