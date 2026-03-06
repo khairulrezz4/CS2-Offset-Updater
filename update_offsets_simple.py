@@ -34,11 +34,58 @@ REQUIRED_OFFSETS = {
 CACHE_FILE = Path(__file__).parent / ".build_cache"
 
 
+def coerce_offset_value(offset_name, value):
+    """Convert offset value to int and reject invalid ranges."""
+    if isinstance(value, int):
+        parsed = value
+    elif isinstance(value, str):
+        cleaned = value.strip().lower()
+        if cleaned.startswith("0x"):
+            parsed = int(cleaned, 16)
+        else:
+            parsed = int(cleaned)
+    else:
+        raise ValueError(f"{offset_name} must be int or numeric string")
+
+    # Offsets are expected to be non-negative integer addresses/field offsets.
+    if parsed < 0 or parsed > 0x7FFFFFFF:
+        raise ValueError(f"{offset_name} has out-of-range value: {parsed}")
+
+    return parsed
+
+
+def extract_required_offsets(remote_offsets):
+    """Validate remote payload and return only required offset keys."""
+    if not isinstance(remote_offsets, dict):
+        raise ValueError("Remote offsets payload is not a JSON object")
+
+    missing = sorted(REQUIRED_OFFSETS - set(remote_offsets.keys()))
+    if missing:
+        raise ValueError(f"Missing required offsets: {', '.join(missing)}")
+
+    extracted = {}
+    for offset_name in REQUIRED_OFFSETS:
+        extracted[offset_name] = coerce_offset_value(offset_name, remote_offsets[offset_name])
+
+    return extracted
+
+
+def write_offsets_atomically(offsets_data):
+    """Write offsets.json safely to avoid partial/corrupted writes."""
+    temp_path = OFFSETS_FILE.with_suffix(".json.tmp")
+    temp_path.write_text(json.dumps(offsets_data, indent=2), encoding="utf-8")
+    temp_path.replace(OFFSETS_FILE)
+
+
 def cs2_is_running():
     """Check if CS2 is running"""
     for proc in psutil.process_iter(['name']):
-        if proc.info['name'] in ['cs2.exe', 'cs2go.exe']:
-            return True
+        try:
+            name = proc.info.get('name')
+            if name in ['cs2.exe', 'cs2go.exe']:
+                return True
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            continue
     return False
 
 
@@ -49,8 +96,11 @@ def get_remote_build():
         response.raise_for_status()
         data = response.json()
         return data.get('build', 0)
-    except Exception as e:
+    except requests.RequestException as e:
         print(f"❌ Failed to fetch build info: {e}")
+        return None
+    except ValueError as e:
+        print(f"❌ Invalid build info JSON: {e}")
         return None
 
 
@@ -60,7 +110,7 @@ def get_local_build():
     if CACHE_FILE.exists():
         try:
             return int(CACHE_FILE.read_text().strip())
-        except:
+        except (ValueError, OSError):
             return None
     return None
 
@@ -73,32 +123,21 @@ def update_offsets():
         response.raise_for_status()
         remote_offsets = response.json()
         
-        # Extract only required offsets
-        updated_offsets = {}
-        missing = []
-        
-        for offset_name in REQUIRED_OFFSETS:
-            if offset_name in remote_offsets:
-                # Convert to int if it's a string (hex or decimal)
-                value = remote_offsets[offset_name]
-                if isinstance(value, str):
-                    if value.startswith('0x'):
-                        value = int(value, 16)
-                    else:
-                        value = int(value)
-                updated_offsets[offset_name] = value
-            else:
-                missing.append(offset_name)
-        
-        if missing:
-            print(f"⚠️  Missing offsets: {', '.join(missing)}")
+        # Validate schema and extract only required keys.
+        updated_offsets = extract_required_offsets(remote_offsets)
         
         # Write a clean JSON file containing only the required keys.
-        OFFSETS_FILE.write_text(json.dumps(updated_offsets, indent=2))
+        write_offsets_atomically(updated_offsets)
         print(f"✓ Updated {len(updated_offsets)} offsets")
         return True
         
-    except Exception as e:
+    except requests.RequestException as e:
+        print(f"❌ Failed to fetch offsets: {e}")
+        return False
+    except ValueError as e:
+        print(f"❌ Invalid offset data: {e}")
+        return False
+    except OSError as e:
         print(f"❌ Failed to fetch offsets: {e}")
         return False
 
