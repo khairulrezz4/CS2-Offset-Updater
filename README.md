@@ -1,12 +1,44 @@
 # Offset Updater (Simple)
 
-This project keeps `offsets.json` up to date using `update_offsets_simple.py`.
+Small Python updater that keeps `offsets.json` current for the linked ESP project.
 
-## Disclaimer
+This updater is intended for this ESP build:
+[Download here](https://www.unknowncheats.me/forum/downloads.php?do=file&id=51609)
 
-This project is provided for educational and research purposes only. Use is at your own risk, and users are responsible for complying with all applicable laws, terms of service, and platform rules. The author is not liable for any issues, damages, or losses that occur during installation or use.
+## What It Does
 
-It tracks only these 13 fields:
+- Watches for `cs2.exe` / `cs2go.exe` launch.
+- Checks remote build metadata.
+- Updates only when the upstream build changes.
+- Writes only the 13 required offsets to `offsets.json`.
+
+## Quick Start
+
+1. Open a terminal in the `ESP` folder.
+2. Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+3. Run the updater:
+
+```bash
+python update_offsets_simple.py
+```
+
+4. Leave it running. Stop with `Ctrl+C`.
+
+## Project Files
+
+- `update_offsets_simple.py`: main updater script
+- `offsets.json`: output file written by the updater
+- `requirements.txt`: Python dependencies
+- `.build_cache`: local file storing last known build
+
+## Required Offset Keys
+
+The updater writes only these fields:
 
 - `dwViewMatrix`
 - `dwLocalPlayerPawn`
@@ -22,57 +54,16 @@ It tracks only these 13 fields:
 - `m_nodeToWorld`
 - `m_sSanitizedPlayerName`
 
-## Files
-
-- `update_offsets_simple.py`: main updater script
-- `offsets.json`: output file updated by the script
-- `requirements.txt`: Python dependencies
-
-## Installation
-
-This offset is to update offset for this ESP: [Download here](https://www.unknowncheats.me/forum/downloads.php?do=file&id=51609)
-
-1. Download or clone this repository.
-2. Open a terminal in the `ESP` folder.
-3. Install dependencies:
-
-```bash
-pip install psutil requests
-```
-
-You can also use:
-
-```bash
-pip install -r requirements.txt
-```
-
-## Usage
-
-Run the updater:
-
-```bash
-python update_offsets_simple.py
-```
-
-The script will:
-
-1. Watch for `cs2.exe` or `cs2go.exe`.
-2. Check the latest build metadata.
-3. Download new offsets only when build changes.
-4. Save only the 13 required fields into `offsets.json`.
-
-Stop the script with `Ctrl+C`.
-
 ## Expected Output
 
-Typical startup logs:
+Startup:
 
 ```text
 CS2 Offset Updater (Simple - 13 offsets)
 Watching for CS2 launch...
 ```
 
-On update:
+When an update is needed:
 
 ```text
 CS2 launched at HH:MM:SS
@@ -83,20 +74,14 @@ Updated 13 offsets
 
 ## Troubleshooting
 
-- `ModuleNotFoundError: No module named 'psutil'`:
-   Run `pip install psutil requests`.
-- `Failed to fetch build info` or `Failed to fetch offsets`:
-   Check internet access and retry.
-- No updates happening:
-   Make sure the process name is `cs2.exe` or `cs2go.exe`.
-- Script exits unexpectedly:
-   Run again and check terminal output for the exact error.
-
-## Notes
-
-- Build caching is stored in `.build_cache`.
-- `offsets.json` is written in decimal format.
-- If a required key is missing upstream, the script prints a warning.
+- `ModuleNotFoundError: No module named 'psutil'`
+   - Run `pip install -r requirements.txt`
+- `Failed to fetch build info` or `Failed to fetch offsets`
+   - Check internet access, then retry
+- No updates happen on launch
+   - Confirm process name is `cs2.exe` or `cs2go.exe`
+- Script exits unexpectedly
+   - Run again and check the exact terminal error
 
 ## Update History
 
@@ -118,4 +103,9 @@ Updated 13 offsets
 - Launch-update check now treats missing remote build as `None` only.
 - Validation now reports missing required offsets with clearer source/path context.
 
-Educational use only. You are responsible for complying with all applicable rules, terms, and laws. The author is not liable for any issues, damages, or losses that occur during installation or use.
+## Disclaimer
+
+This project is provided for educational and research purposes only.
+Use is at your own risk. You are responsible for complying with all applicable laws,
+terms of service, and platform rules. The author is not liable for any issues,
+damages, or losses that occur during installation or use.
