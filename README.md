@@ -2,6 +2,10 @@
 
 This project keeps `offsets.json` up to date using `update_offsets_simple.py`.
 
+## Disclaimer
+
+This project is provided for educational and research purposes only. Use is at your own risk, and users are responsible for complying with all applicable laws, terms of service, and platform rules. The author is not liable for any issues, damages, or losses that occur during installation or use.
+
 It tracks only these 13 fields:
 
 - `dwViewMatrix`
@@ -25,6 +29,8 @@ It tracks only these 13 fields:
 - `requirements.txt`: Python dependencies
 
 ## Installation
+
+This offset is to update offset for this ESP: [Download here](https://www.unknowncheats.me/forum/downloads.php?do=file&id=51609)
 
 1. Download or clone this repository.
 2. Open a terminal in the `ESP` folder.
@@ -91,3 +97,5 @@ Updated 13 offsets
 - Build caching is stored in `.build_cache`.
 - `offsets.json` is written in decimal format.
 - If a required key is missing upstream, the script prints a warning.
+
+Educational use only. You are responsible for complying with all applicable rules, terms, and laws. The author is not liable for any issues, damages, or losses that occur during installation or use.
